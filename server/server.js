@@ -4,7 +4,7 @@ import cors from "cors";
 import connectDB from "./configs/db.js";
 import userRouter from "./routes/User.route.js";
 import chatRouter from "./routes/Chat.route.js";
-import messageRouter from "./routes/message.route.js";
+import messageRouter from "./routes/Message.route.js";
 import creditRouter from "./routes/Credit.route.js";
 import { stripeWebhooks } from "./controllers/Webhooks.controller.js";
 
