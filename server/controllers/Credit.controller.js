@@ -1,5 +1,6 @@
 import Transaction from "../models/Transaction.model.js";
 import Stripe from "stripe";
+import User from "../models/User.model.js";
 
 const plans = [
   {
@@ -94,8 +95,9 @@ export const purchasePlan = async (req, res) => {
         },
       ],
       mode: "payment",
-      success_url: `${origin}/loading`,
-      cancel_url: `${origin}`,
+      // Redirect to /credits page with success and transactionId
+      success_url: `${origin}/credits?success=true&transactionId=${newTransaction._id}`,
+      cancel_url: `${origin}/credits`,
       metadata: {
         transactionId: newTransaction._id.toString(),
         appId: "quickgpt",
@@ -104,6 +106,45 @@ export const purchasePlan = async (req, res) => {
     });
 
     res.json({ success: true, url: session.url });
+  } catch (error) {
+    res.json({ success: false, message: error.message });
+  }
+};
+
+// API Controller to Verify Payment (Localhost fallback when Webhook doesn't trigger)
+export const verifyStripe = async (req, res) => {
+  try {
+    const { transactionId } = req.body;
+
+    if (!transactionId) {
+      return res.json({ success: false, message: "Transaction ID missing" });
+    }
+
+    const transaction = await Transaction.findById(transactionId);
+
+    if (!transaction) {
+      return res.json({ success: false, message: "Transaction not found" });
+    }
+
+    if (!transaction.isPaid) {
+      // User update with updated returnDocument option
+      const updatedUser = await User.findByIdAndUpdate(
+        transaction.userId,
+        { $inc: { credits: Number(transaction.credits) } },
+        { returnDocument: "after" }, // 👈 Updated here to remove deprecation warning
+      );
+
+      transaction.isPaid = true;
+      await transaction.save();
+
+      return res.json({
+        success: true,
+        message: "Credits added successfully",
+        credits: updatedUser.credits,
+      });
+    }
+
+    res.json({ success: false, message: "Transaction already processed" });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }

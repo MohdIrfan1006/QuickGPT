@@ -1,8 +1,11 @@
 import axios from "axios";
+import { GoogleGenAI } from "@google/genai";
 import Chat from "../models/Chat.model.js";
 import User from "../models/User.model.js";
 import imagekit from "../configs/imagekit.js";
-import openai from "../configs/openai.js";
+
+// Google Gemini Client Instance
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Text-based AI Chat Message Controller
 export const textMessageController = async (req, res) => {
@@ -18,6 +21,12 @@ export const textMessageController = async (req, res) => {
     const { chatId, prompt } = req.body;
 
     const chat = await Chat.findOne({ userId, _id: chatId });
+    if (!chat) {
+      return res.json({
+        success: false,
+        message: "Chat not found or unauthorized",
+      });
+    }
 
     chat.messages.push({
       role: "user",
@@ -26,18 +35,20 @@ export const textMessageController = async (req, res) => {
       isImage: false,
     });
 
-    const { choices } = await openai.chat.completions.create({
-      model: "gemini-2.5-flash",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
+    // Active Stable Gemini Model
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
     });
 
+    const responseText =
+      response.text ||
+      response.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "No response generated";
+
     const reply = {
-      ...choices[0].message,
+      role: "assistant",
+      content: responseText,
       timestamp: Date.now(),
       isImage: false,
     };
@@ -48,11 +59,12 @@ export const textMessageController = async (req, res) => {
 
     res.json({ success: true, reply });
   } catch (error) {
+    console.error("Text Chat Error Details:", error);
     res.json({ success: false, message: error.message });
   }
 };
 
-// Image Generation Message Controller
+/// Image Generation Message Controller
 export const imageMessageController = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -67,6 +79,12 @@ export const imageMessageController = async (req, res) => {
     const { prompt, chatId, isPublished } = req.body;
 
     const chat = await Chat.findOne({ userId, _id: chatId });
+    if (!chat) {
+      return res.json({
+        success: false,
+        message: "Chat not found or unauthorized",
+      });
+    }
 
     chat.messages.push({
       role: "user",
@@ -75,23 +93,27 @@ export const imageMessageController = async (req, res) => {
       isImage: false,
     });
 
-    // 1. Clean & Enhance Prompt for HD Quality Output
-    const enhancedPrompt = `${prompt}, 8k resolution, highly detailed, photorealistic, sharp focus, clean lighting, masterpiece, cinematic shot`;
-    const cleanPrompt = encodeURIComponent(enhancedPrompt);
+    // 1. Properly Encode Prompt
+    const cleanPrompt = encodeURIComponent(prompt.trim());
+    const randomSeed = Math.floor(Math.random() * 1000000);
 
-    // 2. Direct Reliable Image Endpoint with 1024x1024 HD Resolution
-    const generatedImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&model=flux`;
+    // 2. Direct Reliable Standard URL
+    const generatedImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&seed=${randomSeed}&nologo=true`;
 
-    // 3. Fetch Image Buffer safely
+    // 3. Fetch Image with standard GET request
     const aiImageResponse = await axios.get(generatedImageUrl, {
       responseType: "arraybuffer",
       headers: {
-        "User-Agent": "Mozilla/5.0", // Block avoid karne ke liye
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
+      timeout: 30000,
     });
 
-    // 4. Convert Buffer to Base64
-    const base64Image = `data:image/png;base64,${Buffer.from(aiImageResponse.data).toString("base64")}`;
+    // 4. Convert to Base64
+    const base64Image = `data:image/png;base64,${Buffer.from(
+      aiImageResponse.data,
+    ).toString("base64")}`;
 
     // 5. Upload to ImageKit
     const uploadResponse = await imagekit.upload({
@@ -114,7 +136,10 @@ export const imageMessageController = async (req, res) => {
 
     res.json({ success: true, reply });
   } catch (error) {
-    console.error("ImageKit Error Details:", error);
-    res.json({ success: false, message: error.message });
+    console.error("Image Error:", error.message);
+    res.json({
+      success: false,
+      message: "Image generation failed. Please try again.",
+    });
   }
 };

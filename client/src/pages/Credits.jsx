@@ -1,18 +1,90 @@
 import React, { useState, useEffect } from "react";
-import { dummyPlans } from "../assets/assets";
 import Loading from "./Loading";
+import toast from "react-hot-toast";
+import { useAppContext } from "../context/AppContext";
 
 const Credits = () => {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { token, axios, fetchUser } = useAppContext();
 
+  // 1. Fetch Plans
   const fetchPlans = async () => {
-    setPlans(dummyPlans);
+    try {
+      const { data } = await axios.get("/api/credit/plan", {
+        headers: { Authorization: token },
+      });
+      if (data.success) {
+        setPlans(data.plans);
+      } else {
+        toast.error(data.message || "Failed to fetch plans.");
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
     setLoading(false);
   };
+
+  // 2. Purchase Plan Redirect
+  const purchasePlan = async (planId) => {
+    const toastId = toast.loading("Processing payment...");
+    try {
+      const { data } = await axios.post(
+        "/api/credit/purchase",
+        { planId },
+        { headers: { Authorization: token } },
+      );
+      if (data.success) {
+        toast.dismiss(toastId);
+        window.location.href = data.url;
+      } else {
+        toast.error(data.message, { id: toastId });
+      }
+    } catch (error) {
+      toast.error(error.message, { id: toastId });
+    }
+  };
+
+  // 3. Verify Payment after Stripe Redirect
   useEffect(() => {
-    fetchPlans();
-  }, []);
+    const verifyPayment = async () => {
+      const queryParams = new URLSearchParams(window.location.search);
+      const isSuccess = queryParams.get("success");
+      const transactionId = queryParams.get("transactionId");
+
+      if (isSuccess === "true" && transactionId && token) {
+        const toastId = toast.loading("Verifying payment...");
+        try {
+          const { data } = await axios.post(
+            "/api/credit/verify",
+            { transactionId },
+            { headers: { Authorization: token } },
+          );
+
+          if (data.success) {
+            toast.success("Payment Verified! Credits added.", { id: toastId });
+            await fetchUser(); // UI par credits increment karne ke liye
+          } else {
+            toast.error(data.message, { id: toastId });
+          }
+
+          // Clear URL Params
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname,
+          );
+        } catch (error) {
+          toast.error(error.message, { id: toastId });
+        }
+      }
+    };
+
+    if (token) {
+      fetchPlans();
+      verifyPayment();
+    }
+  }, [token]);
 
   if (loading) return <Loading />;
 
@@ -25,7 +97,11 @@ const Credits = () => {
         {plans.map((plan) => (
           <div
             key={plan._id}
-            className={`border border-gray-200 dark:border-purple-700 rounded-lg shadow hover:shadow-lg transition-shadow p-6 min-w-[300px] flex flex-col ${plan._id === "pro" ? "bg-purple-50 dark:bg-purple-900" : "bg-white dark:bg-transparent"}`}
+            className={`border border-gray-200 dark:border-purple-700 rounded-lg shadow hover:shadow-lg transition-shadow p-6 min-w-[300px] flex flex-col ${
+              plan._id === "pro"
+                ? "bg-purple-50 dark:bg-purple-900"
+                : "bg-white dark:bg-transparent"
+            }`}
           >
             <div className="flex-1">
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
@@ -44,7 +120,10 @@ const Credits = () => {
                 ))}
               </ul>
             </div>
-            <button className="mt-6 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-medium py-2 rounded transition-colors cursor-pointer">
+            <button
+              onClick={() => purchasePlan(plan._id)}
+              className="mt-6 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-medium py-2 rounded transition-colors cursor-pointer"
+            >
               Buy Now
             </button>
           </div>

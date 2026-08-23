@@ -62,33 +62,26 @@ export const getUser = async (req, res) => {
 // API to get published images
 export const getPublishedImages = async (req, res) => {
   try {
-    const publishedImageMessages = await Chat.aggregate([
-      { $unwind: "$messages" },
-      {
-        $match: {
-          "messages.isImage": true,
-          "messages.isPublished": true,
-        },
-      },
-      {
-        $lookup: {
-          from: "users", // MongoDB me users collection ka naam
-          localField: "userId",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-      {
-        $project: {
-          _id: 0,
-          imageUrl: "$messages.content",
-          userName: "$user.name", // Dynamic user name
-        },
-      },
-    ]);
+    // 1. Un sabhi chats ko layo jinke messages me kam se kam ek published image ho
+    const chats = await Chat.find({
+      "messages.isPublished": true,
+    }).populate("userId", "name");
 
-    res.json({ success: true, images: publishedImageMessages });
+    const images = [];
+
+    // 2. Published images ko array se extract karo
+    chats.forEach((chat) => {
+      chat.messages.forEach((msg) => {
+        if (msg.isImage && msg.isPublished) {
+          images.push({
+            imageUrl: msg.content,
+            userName: chat.userId ? chat.userId.name : "Anonymous",
+          });
+        }
+      });
+    });
+
+    res.json({ success: true, images });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }
