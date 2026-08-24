@@ -3,9 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import Chat from "../models/Chat.model.js";
 import User from "../models/User.model.js";
 import imagekit from "../configs/imagekit.js";
-
-// Google Gemini Client Instance
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import ai from "../configs/gemini.js";
 
 // Text-based AI Chat Message Controller
 export const textMessageController = async (req, res) => {
@@ -64,7 +62,7 @@ export const textMessageController = async (req, res) => {
   }
 };
 
-/// Image Generation Message Controller
+// Image Generation Message Controller
 export const imageMessageController = async (req, res) => {
   try {
     const userId = req.user._id;
