@@ -20,7 +20,6 @@ export const stripeWebhooks = async (request, response) => {
   }
 
   try {
-    // Standard Checkout Event Use Karein
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
       const { transactionId, appId } = session.metadata || {};

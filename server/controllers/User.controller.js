@@ -62,14 +62,12 @@ export const getUser = async (req, res) => {
 // API to get published images
 export const getPublishedImages = async (req, res) => {
   try {
-    // 1. Un sabhi chats ko layo jinke messages me kam se kam ek published image ho
     const chats = await Chat.find({
       "messages.isPublished": true,
     }).populate("userId", "name");
 
     const images = [];
 
-    // 2. Published images ko array se extract karo
     chats.forEach((chat) => {
       chat.messages.forEach((msg) => {
         if (msg.isImage && msg.isPublished) {
